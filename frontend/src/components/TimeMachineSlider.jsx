@@ -1,187 +1,113 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, RotateCcw, Clock } from 'lucide-react';
-import api from '../lib/api';
-
-const MIN_YEAR = 2010;
-const MAX_YEAR = 2026;
-
-function AnimatedNumber({ value }) {
-  return (
-    <AnimatePresence mode="popLayout">
-      <motion.span
-        key={value}
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: -20, opacity: 0 }}
-        transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="inline-block tabular-nums"
-      >
-        {value?.toLocaleString() ?? '—'}
-      </motion.span>
-    </AnimatePresence>
-  );
-}
-
+import { useEffect, useState } from "react";
+import { Play, Pause, RotateCcw, CalendarDays } from "lucide-react";
+import { useLaboratory, number } from "../context/laboratory";
 export default function TimeMachineSlider({ activeYear, onYearChange }) {
+  const { yearly, loading } = useLaboratory();
   const [playing, setPlaying] = useState(false);
-  const [yearlyData, setYearlyData] = useState(null);
-  const intervalRef = useRef(null);
-
+  const min = 2010;
+  const max = new Date().getFullYear();
+  const byYear = yearly?.global_by_year || {};
+  const maxCount = Math.max(...Object.values(byYear), 1);
+  const total = Object.entries(byYear)
+    .filter(([year]) => Number(year) <= activeYear)
+    .reduce((sum, [, count]) => sum + count, 0);
   useEffect(() => {
-    api.get('/api/analytics/yearly-stats').then(r => setYearlyData(r.data)).catch(() => {});
-  }, []);
-
-  const stopPlay = useCallback(() => {
-    setPlaying(false);
-    clearInterval(intervalRef.current);
-  }, []);
-
-  const startPlay = useCallback(() => {
-    setPlaying(true);
-    clearInterval(intervalRef.current);
-    if (activeYear >= MAX_YEAR) onYearChange(MIN_YEAR);
-    intervalRef.current = setInterval(() => {
-      onYearChange(prev => {
-        if (prev >= MAX_YEAR) {
-          stopPlay();
-          return MAX_YEAR;
-        }
-        return prev + 1;
-      });
+    if (!playing) return;
+    const timer = setInterval(() => {
+      if (activeYear >= max) setPlaying(false);
+      else onYearChange(activeYear + 1);
     }, 900);
-  }, [activeYear, onYearChange, stopPlay]);
-
-  useEffect(() => () => clearInterval(intervalRef.current), []);
-
-  const progress = ((activeYear - MIN_YEAR) / (MAX_YEAR - MIN_YEAR)) * 100;
-  const globalByYear = yearlyData?.global_by_year || {};
-  const cumulative = Object.entries(globalByYear)
-    .filter(([y]) => parseInt(y) <= activeYear)
-    .reduce((sum, [, c]) => sum + c, 0);
-  const thisYear = globalByYear[activeYear] || 0;
-  const maxYearCount = Math.max(...Object.values(globalByYear), 1);
-
+    return () => clearInterval(timer);
+  }, [playing, activeYear, max, onYearChange]);
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 backdrop-blur-xl
-      bg-gradient-to-r from-slate-900/90 via-indigo-950/50 to-slate-900/90 p-5 mt-6">
-
-      {/* Decorative background */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-20 -left-20 w-60 h-60 rounded-full bg-indigo-600/10 blur-3xl" />
-        <div className="absolute -bottom-20 -right-20 w-60 h-60 rounded-full bg-violet-600/10 blur-3xl" />
+    <section
+      className="research-timeline"
+      aria-label="Évolution du corpus par année"
+    >
+      <div className="timeline-label">
+        <CalendarDays size={20} strokeWidth={1.3} />
+        <div>
+          <span className="eyebrow">PRENDRE DU RECUL</span>
+          <h3>La recherche au fil du temps.</h3>
+        </div>
       </div>
-
-      <div className="relative flex flex-wrap items-center gap-6">
-        {/* Icon + label */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="p-2 rounded-xl bg-indigo-500/20 border border-indigo-500/30">
-            <Clock className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest">Time Machine</p>
-            <p className="text-xs text-slate-500">Évolution du laboratoire</p>
-          </div>
-        </div>
-
-        {/* Year display */}
-        <div className="flex-shrink-0 text-center min-w-[80px]">
-          <div className="text-4xl font-black text-white leading-none tabular-nums overflow-hidden h-10 flex items-center justify-center">
-            <AnimatedNumber value={activeYear} />
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">Année</p>
-        </div>
-
-        {/* Stats */}
-        <div className="flex gap-4 flex-shrink-0">
-          <div className="text-center">
-            <div className="text-lg font-bold text-emerald-400 tabular-nums h-7 flex items-center">
-              <AnimatedNumber value={thisYear} />
-            </div>
-            <p className="text-xs text-slate-500">pubs cette année</p>
-          </div>
-          <div className="w-px bg-white/10" />
-          <div className="text-center">
-            <div className="text-lg font-bold text-blue-400 tabular-nums h-7 flex items-center">
-              <AnimatedNumber value={cumulative} />
-            </div>
-            <p className="text-xs text-slate-500">cumulées jusqu'ici</p>
-          </div>
-        </div>
-
-        {/* Slider + controls */}
-        <div className="flex-1 min-w-[200px] space-y-2">
-          {/* Mini bar chart */}
-          {Object.keys(globalByYear).length > 0 && (
-            <div className="flex items-end gap-0.5 h-8">
-              {Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i).map(y => {
-                const count = globalByYear[y] || 0;
-                const heightPct = (count / maxYearCount) * 100;
-                const isPast = y <= activeYear;
-                return (
-                  <div
-                    key={y}
-                    style={{ height: `${Math.max(4, heightPct)}%` }}
-                    className={`flex-1 rounded-t-sm transition-all duration-300 cursor-pointer ${
-                      isPast ? 'bg-indigo-400' : 'bg-slate-700'
-                    } ${y === activeYear ? 'bg-white' : ''}`}
-                    onClick={() => onYearChange(y)}
-                    title={`${y}: ${count} pubs`}
-                  />
-                );
-              })}
-            </div>
+      <div className="timeline-year">
+        {activeYear}
+        <span>ANNÉE OBSERVÉE</span>
+      </div>
+      <div className="timeline-counts">
+        <span>
+          <strong>{yearly ? number(byYear[activeYear] || 0) : "—"}</strong>
+          publications cette année
+        </span>
+        <span>
+          <strong>{yearly ? number(total) : "—"}</strong>cumulées depuis {min}
+        </span>
+      </div>
+      <div className="timeline-control">
+        <div className="timeline-bars">
+          {Array.from({ length: max - min + 1 }, (_, i) => min + i).map(
+            (year) => (
+              <button
+                key={year}
+                onClick={() => {
+                  setPlaying(false);
+                  onYearChange(year);
+                }}
+                aria-label={`Année ${year}, ${byYear[year] || 0} publications`}
+                title={`${year} · ${byYear[year] || 0} publications`}
+                className={year === activeYear ? "is-active" : ""}
+              >
+                <span
+                  style={{
+                    height: `${((byYear[year] || 0) / maxCount) * 100}%`,
+                  }}
+                />
+              </button>
+            ),
           )}
-
-          {/* Range slider */}
-          <div className="relative">
-            <input
-              type="range"
-              min={MIN_YEAR}
-              max={MAX_YEAR}
-              step={1}
-              value={activeYear}
-              onChange={e => { stopPlay(); onYearChange(+e.target.value); }}
-              className="w-full accent-indigo-400 cursor-pointer h-1.5"
-              style={{
-                background: `linear-gradient(to right, #818cf8 ${progress}%, #334155 ${progress}%)`
-              }}
-            />
-          </div>
-
-          <div className="flex justify-between text-xs text-slate-600">
-            <span>{MIN_YEAR}</span>
-            {Array.from({ length: 3 }, (_, i) => MIN_YEAR + Math.round((MAX_YEAR - MIN_YEAR) * (i + 1) / 4)).map(y => (
-              <span key={y}>{y}</span>
-            ))}
-            <span>{MAX_YEAR}</span>
-          </div>
         </div>
-
-        {/* Controls */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={() => { stopPlay(); onYearChange(MIN_YEAR); }}
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition border border-white/10"
-            title="Retour au début"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={playing ? stopPlay : startPlay}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition border ${
-              playing
-                ? 'bg-rose-500/20 border-rose-500/40 text-rose-300 hover:bg-rose-500/30'
-                : 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30'
-            }`}
-          >
-            {playing
-              ? <><Pause className="w-4 h-4" /> Pause</>
-              : <><Play className="w-4 h-4" /> Play</>
-            }
-          </button>
+        <input
+          aria-label="Année observée"
+          type="range"
+          min={min}
+          max={max}
+          step="1"
+          value={activeYear}
+          disabled={!yearly && loading}
+          onChange={(e) => {
+            setPlaying(false);
+            onYearChange(Number(e.target.value));
+          }}
+        />
+        <div className="timeline-axis">
+          <span>{min}</span>
+          <span>{Math.round((min + max) / 2)}</span>
+          <span>{max}</span>
         </div>
       </div>
-    </div>
+      <div className="timeline-buttons">
+        <button
+          className="icon-button"
+          aria-label="Revenir à l’année actuelle"
+          onClick={() => {
+            setPlaying(false);
+            onYearChange(max);
+          }}
+        >
+          <RotateCcw size={15} />
+        </button>
+        <button
+          className="button button-secondary"
+          onClick={() => {
+            if (!playing && activeYear >= max) onYearChange(min);
+            setPlaying(!playing);
+          }}
+        >
+          {playing ? <Pause size={14} /> : <Play size={14} />}
+          {playing ? "Pause" : "Parcourir"}
+        </button>
+      </div>
+    </section>
   );
 }

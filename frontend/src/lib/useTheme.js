@@ -1,21 +1,26 @@
-import { useState, useEffect } from 'react';
-
+import { useState, useEffect } from "react";
 export default function useTheme() {
-    const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
-
-    useEffect(() => {
-        const root = window.document.documentElement;
-        if (theme === 'dark') {
-            root.classList.add('dark');
-        } else {
-            root.classList.remove('dark');
-        }
-        localStorage.setItem('theme', theme);
-    }, [theme]);
-
-    const toggleTheme = () => {
-        setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-    };
-
-    return { theme, toggleTheme };
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("listic-theme-v2") === "dark"
+        ? "dark"
+        : "light";
+    } catch {
+      return "light";
+    }
+  });
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.style.colorScheme = theme;
+    try {
+      localStorage.setItem("listic-theme-v2", theme);
+    } catch {
+      /* Storage can be disabled. */
+    }
+  }, [theme]);
+  return {
+    theme,
+    toggleTheme: () =>
+      setTheme((previous) => (previous === "dark" ? "light" : "dark")),
+  };
 }

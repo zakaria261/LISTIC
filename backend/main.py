@@ -14,6 +14,7 @@ from services.ml_clustering import perform_clustering
 from services.adum import fetch_listic_theses, compare_with_db as adum_compare
 from services.listic_scraper import compare_website_with_db
 from pydantic import BaseModel
+from services.oracle import OracleQuestion, answer_question
 
 app = FastAPI(title="LISTIC Dashboard API", version="2.0.0")
 
@@ -199,6 +200,11 @@ def read_root():
 
 
 # ── Sync status ────────────────────────────────────────────────────────────────
+@app.post("/api/oracle")
+async def query_oracle(request: OracleQuestion):
+    return await answer_question(db, request.question)
+
+
 @app.get("/api/sync/status")
 async def get_sync_status():
     pub_count = await db.publications.count_documents({})
